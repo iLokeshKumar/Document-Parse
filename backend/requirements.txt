@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+python-multipart
+python-dotenv
+llama-index-core
+llama-index-llms-gemini
+llama-index-embeddings-gemini
+sqlalchemy
+passlib[argon2]
+python-jose[cryptography]
+psycopg2-binary
+pyotp
+qrcode
