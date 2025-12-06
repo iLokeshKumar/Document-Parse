@@ -5,7 +5,7 @@ import { getAnalytics, isSupported } from "firebase/analytics";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-    apiKey: "AIzaSyBrtu1yYhsZxSmYsV3gMz_RBD9wDx3KC7k",
+    apiKey: "api_key",
     authDomain: "legal-ai-aut.firebaseapp.com",
     projectId: "legal-ai-aut",
     storageBucket: "legal-ai-aut.firebasestorage.app",
