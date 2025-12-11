@@ -168,6 +168,48 @@ export default function Home() {
     }
   };
 
+  const [listening, setListening] = useState(false);
+
+  const startListening = () => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      alert("Browser doesn't support speech recognition. Try Chrome.");
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => {
+      setListening(true);
+    };
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setQuery((prev) => prev ? prev + ' ' + transcript : transcript);
+      setListening(false);
+    };
+
+    recognition.onerror = (event: any) => {
+      if (event.error === 'no-speech') {
+        // Just stop listening, no need to alert
+        return;
+      }
+      console.error("Speech recognition error", event.error);
+      alert("Error occurred in recognition: " + event.error);
+      setListening(false);
+    };
+
+    recognition.onend = () => {
+      setListening(false);
+    };
+
+    recognition.start();
+  };
+
   return (
     <main className="flex min-h-screen flex-col items-center p-8 bg-gray-50">
       <div className="w-full max-w-4xl flex justify-between items-center mb-8">
@@ -273,12 +315,19 @@ export default function Home() {
 
         <div className="p-4 border-t bg-gray-50">
           <div className="flex gap-4">
+            <button
+              onClick={startListening}
+              className={`p-3 rounded-lg border ${listening ? 'bg-red-100 text-red-600 border-red-300 animate-pulse' : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-100'}`}
+              title="Dictate Query"
+            >
+              🎤
+            </button>
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleQuery()}
-              placeholder="Ask a legal question..."
+              placeholder={listening ? "Listening..." : "Ask a legal question..."}
               className="flex-grow p-3 rounded-lg border border-gray-300 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <button
