@@ -50,6 +50,24 @@ def get_query_engine():
     if os.path.exists(CHROMA_PATH):
         storage_context = StorageContext.from_defaults(persist_dir=CHROMA_PATH)
         index = load_index_from_storage(storage_context)
-        return index.as_query_engine()
+        from llama_index.core import PromptTemplate
+        
+        # Custom Prompt for Multilingual Support
+        qa_prompt_tmpl_str = (
+            "Context information is below.\n"
+            "---------------------\n"
+            "{context_str}\n"
+            "---------------------\n"
+            "Given the context information and not prior knowledge, "
+            "answer the query.\n"
+            "IMPORTANT: Answer in the same language as the query. "
+            "If the query is in Hindi, Tamil, Telugu, Kannada, Malayalam, Sanskrit, or Urdu, "
+            "translate the answer to that language accurately.\n"
+            "Query: {query_str}\n"
+            "Answer: "
+        )
+        qa_prompt_tmpl = PromptTemplate(qa_prompt_tmpl_str)
+
+        return index.as_query_engine(text_qa_template=qa_prompt_tmpl)
     else:
         return None

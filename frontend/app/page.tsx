@@ -170,6 +170,19 @@ export default function Home() {
 
   const [listening, setListening] = useState(false);
 
+  const [language, setLanguage] = useState('en-US');
+
+  const languages = [
+    { code: 'en-US', name: 'English' },
+    { code: 'hi-IN', name: 'Hindi' },
+    { code: 'ta-IN', name: 'Tamil' },
+    { code: 'te-IN', name: 'Telugu' },
+    { code: 'kn-IN', name: 'Kannada' },
+    { code: 'ml-IN', name: 'Malayalam' },
+    { code: 'sa-IN', name: 'Sanskrit' },
+    { code: 'ur-IN', name: 'Urdu' },
+  ];
+
   const startListening = () => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       alert("Browser doesn't support speech recognition. Try Chrome.");
@@ -181,7 +194,7 @@ export default function Home() {
 
     recognition.continuous = false;
     recognition.interimResults = false;
-    recognition.lang = 'en-US';
+    recognition.lang = language;
 
     recognition.onstart = () => {
       setListening(true);
