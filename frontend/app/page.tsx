@@ -33,6 +33,53 @@ export default function Home() {
     router.push('/login');
   };
 
+  // Documents State
+  const [documents, setDocuments] = useState<any[]>([]);
+
+  const fetchDocuments = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      // Fetch 6 to check if there are more than 5
+      const res = await fetch('http://localhost:8000/documents?limit=6', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDocuments(data);
+      }
+    } catch (e) {
+      console.error("Failed to fetch documents", e);
+    }
+  };
+
+  const handleDeleteDocument = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this document? This cannot be undone.")) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`http://localhost:8000/documents/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        alert("Document deleted successfully");
+        fetchDocuments(); // Refresh list
+      } else {
+        alert("Failed to delete document");
+      }
+    } catch (e) {
+      console.error("Delete failed", e);
+    }
+  };
+
+  useEffect(() => {
+    if (userRole === 'admin' || userRole === 'lawyer') {
+      fetchDocuments();
+    }
+  }, [userRole]);
+
+  // Update upload success to refresh list
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.[0]) return;
     setUploading(true);
@@ -58,6 +105,7 @@ export default function Home() {
 
       const data = await res.json();
       setUploadStatus(`Uploaded: ${data.filename} (${data.chunks} chunks)`);
+      fetchDocuments(); // Refresh list
     } catch (error: any) {
       console.error(error);
       setUploadStatus(`Error: ${error.message}`);
@@ -65,6 +113,9 @@ export default function Home() {
       setUploading(false);
     }
   };
+
+  const displayedDocs = documents.slice(0, 5);
+  const showViewAll = documents.length > 5;
 
   const handleQuery = async () => {
     if (!query.trim()) return;
@@ -160,6 +211,7 @@ export default function Home() {
       window.speechSynthesis.cancel();
 
       const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = language; // Use the currently selected language
       utterance.rate = 0.9;
       utterance.pitch = 1;
       window.speechSynthesis.speak(utterance);
@@ -208,7 +260,11 @@ export default function Home() {
 
     recognition.onerror = (event: any) => {
       if (event.error === 'no-speech') {
-        // Just stop listening, no need to alert
+        return;
+      }
+      if (event.error === 'network') {
+        alert("Network error: Speech recognition requires an internet connection.");
+        setListening(false);
         return;
       }
       console.error("Speech recognition error", event.error);
@@ -225,7 +281,7 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen flex-col items-center p-8 bg-gray-50">
-      <div className="w-full max-w-4xl flex justify-between items-center mb-8">
+      <div className="w-full max-w-4xl flex justify-between items-center mb-4">
         <h1 className="text-3xl font-bold text-gray-800">Legal AI Assistant</h1>
         <div className="flex items-center gap-4">
           {userRole && (
@@ -259,6 +315,38 @@ export default function Home() {
           />
           {uploading && <p className="mt-2 text-blue-600">Processing file...</p>}
           {uploadStatus && <p className="mt-2 text-sm text-gray-600">{uploadStatus}</p>}
+
+          {/* Document History */}
+          <div className="mt-8 border-t pt-4">
+            <h3 className="text-lg font-medium mb-3 text-gray-700">Uploaded Documents (Latest 5)</h3>
+            {displayedDocs.length === 0 ? (
+              <p className="text-sm text-gray-500">No documents uploaded yet.</p>
+            ) : (
+              <ul className="divide-y divide-gray-200">
+                {displayedDocs.map((doc) => (
+                  <li key={doc.id} className="py-2 flex justify-between items-center">
+                    <span className="text-sm text-gray-700 font-medium">{doc.filename}</span>
+                    <div className="flex items-center gap-4">
+                      <span className="text-xs text-gray-500">{new Date(doc.upload_date).toLocaleDateString()}</span>
+                      <button
+                        onClick={() => handleDeleteDocument(doc.id)}
+                        className="text-xs text-red-600 hover:text-red-800 font-semibold"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {showViewAll && (
+              <div className="mt-4 text-center">
+                <a href="/documents" className="text-sm text-indigo-600 hover:text-indigo-800 font-medium hover:underline">
+                  View All Documents &rarr;
+                </a>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -328,6 +416,18 @@ export default function Home() {
 
         <div className="p-4 border-t bg-gray-50">
           <div className="flex gap-4">
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="p-3 rounded-lg border border-gray-300 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              title="Select Language"
+            >
+              {languages.map((lang) => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.name}
+                </option>
+              ))}
+            </select>
             <button
               onClick={startListening}
               className={`p-3 rounded-lg border ${listening ? 'bg-red-100 text-red-600 border-red-300 animate-pulse' : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-100'}`}

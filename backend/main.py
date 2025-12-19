@@ -381,6 +381,16 @@ async def upload_file(file: UploadFile = File(...), current_user: User = Depends
     
     if not os.path.exists(DATA_DIR):
         os.makedirs(DATA_DIR)
+        
+    # Validation: Check file extension
+    allowed_extensions = {".pdf", ".txt", ".docx", ".doc"}
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    
+    if file_ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed: {', '.join(allowed_extensions)}"
+        )
     
     file_path = os.path.join(DATA_DIR, file.filename)
     with open(file_path, "wb") as buffer:
@@ -390,12 +400,73 @@ async def upload_file(file: UploadFile = File(...), current_user: User = Depends
         print(f"Processing upload for: {file.filename}")
         num_docs = ingest_file(file_path)
         print(f"Ingestion complete. Docs: {num_docs}")
+
+        # Save to Document table
+        from app.database import Document
+        new_doc = Document(
+            filename=file.filename,
+            upload_date=datetime.utcnow().isoformat(),
+            user_id=current_user.id
+        )
+        # Use a new DB session for this
+        from app.database import SessionLocal
+        db = SessionLocal()
+        try:
+            db.add(new_doc)
+            db.commit()
+        finally:
+            db.close()
+
         return {"message": "File uploaded and ingested", "filename": file.filename, "chunks": num_docs}
     except Exception as e:
         print(f"Upload failed: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/documents")
+def get_documents(skip: int = 0, limit: int = 100, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    if current_user.role not in ["admin", "lawyer"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    from app.database import Document
+    docs = db.query(Document).order_by(Document.upload_date.desc()).offset(skip).limit(limit).all()
+    return docs
+
+@app.get("/documents/count")
+def get_document_count(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    if current_user.role not in ["admin", "lawyer"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    from app.database import Document
+    count = db.query(Document).count()
+    return {"count": count}
+
+@app.delete("/documents/{doc_id}")
+def delete_document(doc_id: int, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    if current_user.role not in ["admin", "lawyer"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    from app.database import Document
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    # 1. Delete Physical File
+    file_path = os.path.join(DATA_DIR, doc.filename)
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        
+    # 2. Delete DB Record
+    db.delete(doc)
+    db.commit()
+    
+    # 3. Handle Vector DB (Hard to delete single doc efficiently without metadata tracking on chunks)
+    # Ideally: We should re-ingest all remaining files to keep index clean.
+    # For now: We will leave vectors (they become "orphan" knowledge). 
+    # Better approach for V2: Clear index and re-ingest all files in DATA_DIR.
+    
+    return {"message": f"Document {doc.filename} deleted"}
 
 @app.post("/query")
 async def query_index(request: QueryRequest, current_user: User = Depends(get_current_active_user)):

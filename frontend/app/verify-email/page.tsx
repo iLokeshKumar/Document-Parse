@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
     const searchParams = useSearchParams();
     const token = searchParams.get('token');
     const [status, setStatus] = useState('Verifying...');
@@ -42,20 +42,28 @@ export default function VerifyEmailPage() {
     }, [token]);
 
     return (
+        <div className="max-w-md w-full p-8 bg-white rounded-lg shadow-md text-center">
+            <h2 className="text-2xl font-bold mb-4">Email Verification</h2>
+
+            {error ? (
+                <div className="text-red-600 mb-4">{error}</div>
+            ) : (
+                <div className="text-green-600 mb-4">{status}</div>
+            )}
+
+            <Link href="/login" className="inline-block bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
+                Go to Login
+            </Link>
+        </div>
+    );
+}
+
+export default function VerifyEmailPage() {
+    return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50">
-            <div className="max-w-md w-full p-8 bg-white rounded-lg shadow-md text-center">
-                <h2 className="text-2xl font-bold mb-4">Email Verification</h2>
-
-                {error ? (
-                    <div className="text-red-600 mb-4">{error}</div>
-                ) : (
-                    <div className="text-green-600 mb-4">{status}</div>
-                )}
-
-                <Link href="/login" className="inline-block bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
-                    Go to Login
-                </Link>
-            </div>
+            <Suspense fallback={<div>Loading...</div>}>
+                <VerifyEmailContent />
+            </Suspense>
         </div>
     );
 }
