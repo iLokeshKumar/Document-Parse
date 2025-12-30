@@ -21,7 +21,7 @@ async def process_with_gemini_ocr(file_path: str):
     Uses Gemini 1.5 Flash to extract text from images or PDFs via multimodal perception.
     Supports English + 8 Indian languages: Hindi, Tamil, Malayalam, Telugu, Kannada, Sanskrit, and Urdu.
     """
-    model = genai.GenerativeModel("gemini-1.5-flash-latest")
+    model = genai.GenerativeModel("gemini-flash-latest")
     
     # 1. Upload file to Gemini API (supports PDF, PNG, JPEG etc.)
     # Note: Using the file API is more reliable for multi-page documents
