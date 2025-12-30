@@ -12,3 +12,8 @@ psycopg2-binary
 pyotp
 qrcode
 firebase-admin
+pymupdf
+llama-index-readers-file
+google-generativeai
+Pillow>=12.0.0
+docx2txt

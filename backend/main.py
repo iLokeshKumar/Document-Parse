@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, status, BackgroundTasks
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 import shutil
@@ -383,7 +384,7 @@ async def upload_file(file: UploadFile = File(...), current_user: User = Depends
         os.makedirs(DATA_DIR)
         
     # Validation: Check file extension
-    allowed_extensions = {".pdf", ".txt", ".docx", ".doc"}
+    allowed_extensions = {".pdf", ".txt", ".docx", ".doc", ".png", ".jpg", ".jpeg"}
     file_ext = os.path.splitext(file.filename)[1].lower()
     
     if file_ext not in allowed_extensions:
@@ -398,7 +399,7 @@ async def upload_file(file: UploadFile = File(...), current_user: User = Depends
     
     try:
         print(f"Processing upload for: {file.filename}")
-        num_docs = ingest_file(file_path)
+        num_docs = await ingest_file(file_path)
         print(f"Ingestion complete. Docs: {num_docs}")
 
         # Save to Document table
@@ -441,6 +442,13 @@ def get_document_count(current_user: User = Depends(get_current_active_user), db
     count = db.query(Document).count()
     return {"count": count}
 
+@app.get("/view-document/{filename}")
+async def view_document(filename: str, current_user: User = Depends(get_current_active_user)):
+    file_path = os.path.join(DATA_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path)
+
 @app.delete("/documents/{doc_id}")
 def delete_document(doc_id: int, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     if current_user.role not in ["admin", "lawyer"]:
@@ -475,16 +483,32 @@ async def query_index(request: QueryRequest, current_user: User = Depends(get_cu
         raise HTTPException(status_code=404, detail="Index not found. Please upload a file first.")
     
     response = engine.query(request.query)
+    
+    # Process and de-duplicate sources
+    sources = []
+    seen_sources = set()
+    for node in response.source_nodes:
+        # Get filename and strip directory paths
+        raw_file = node.metadata.get("file_name") or node.metadata.get("file_path", "Unknown Source")
+        filename = os.path.basename(raw_file)
+        
+        page = node.metadata.get("page_label") or node.metadata.get("page", "")
+        text = (node.get_text() or "").strip()
+        
+        # Create a unique key for this citation bit
+        source_key = f"{filename}_{page}_{text[:50]}"
+        
+        if source_key not in seen_sources and text:
+            sources.append({
+                "file": filename,
+                "page": page,
+                "text": text[:300] + "..." if len(text) > 300 else text
+            })
+            seen_sources.add(source_key)
+
     return {
         "response": response.response,
-        "sources": [
-            {
-                "file": node.metadata.get("file_name"), 
-                "page": node.metadata.get("page_label"),
-                "text": node.get_text()[:200] + "..." # Preview text
-            }
-            for node in response.source_nodes
-        ]
+        "sources": sources[:5] # Limit to top 5 unique sources for readability
     }
 
 class FeedbackCreate(BaseModel):
@@ -517,3 +541,18 @@ async def submit_feedback(
     db.commit()
     
     return {"message": "Feedback submitted successfully"}
+
+@app.get("/admin/feedback/summary")
+async def get_feedback_summary(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    if current_user.role not in ["admin", "lawyer"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Return unhelpful feedback first for prioritization
+    unhelpful = db.query(Feedback).filter(Feedback.rating == "thumbs_down").order_by(Feedback.timestamp.desc()).all()
+    helpful_count = db.query(Feedback).filter(Feedback.rating == "thumbs_up").count()
+    
+    return {
+        "unhelpful_feedback": unhelpful,
+        "helpful_count": helpful_count,
+        "total_count": len(unhelpful) + helpful_count
+    }

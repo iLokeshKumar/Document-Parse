@@ -40,6 +40,12 @@ export default function DocumentsArchivePage() {
             const res = await fetch(`http://localhost:8000/documents?skip=${skip}&limit=${limit}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
+            if (res.status === 401) {
+                alert("Session timed out. Please login again.");
+                localStorage.removeItem('token');
+                router.push('/login');
+                return;
+            }
             if (res.ok) {
                 const data = await res.json();
                 setDocuments(data);
@@ -49,6 +55,10 @@ export default function DocumentsArchivePage() {
             const countRes = await fetch('http://localhost:8000/documents/count', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
+            if (countRes.status === 401) {
+                // Don't alert twice if both fail, fetch has already handled it
+                return;
+            }
             if (countRes.ok) {
                 const data = await countRes.json();
                 setTotalCount(data.count);
@@ -75,6 +85,13 @@ export default function DocumentsArchivePage() {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
+            if (res.status === 401) {
+                alert("Session timed out. Please login again.");
+                localStorage.removeItem('token');
+                router.push('/login');
+                return;
+            }
+
             if (res.ok) {
                 alert("Document deleted successfully");
                 fetchDocuments(); // Refresh list
@@ -83,6 +100,33 @@ export default function DocumentsArchivePage() {
             }
         } catch (e) {
             console.error("Delete failed", e);
+        }
+    };
+
+    const handleViewDocument = async (filename: string) => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`http://localhost:8000/view-document/${encodeURIComponent(filename)}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (res.status === 401) {
+                alert("Session timed out. Please login again.");
+                localStorage.removeItem('token');
+                router.push('/login');
+                return;
+            }
+
+            if (res.ok) {
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                window.open(url, '_blank');
+                setTimeout(() => window.URL.revokeObjectURL(url), 10000);
+            } else {
+                alert("Failed to load document preview");
+            }
+        } catch (e) {
+            console.error("View failed", e);
         }
     };
 
@@ -131,7 +175,13 @@ export default function DocumentsArchivePage() {
                                         <tr key={doc.id}>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{doc.filename}</td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(doc.upload_date).toLocaleString()}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                                                <button
+                                                    onClick={() => handleViewDocument(doc.filename)}
+                                                    className="text-indigo-600 hover:text-indigo-900 bg-indigo-50 px-3 py-1 rounded hover:bg-indigo-100 transition-colors"
+                                                >
+                                                    View
+                                                </button>
                                                 <button
                                                     onClick={() => handleDeleteDocument(doc.id)}
                                                     className="text-red-600 hover:text-red-900 bg-red-50 px-3 py-1 rounded hover:bg-red-100 transition-colors"

@@ -27,8 +27,22 @@ def clear_data():
     else:
         print("No Data directory found.")
 
+    # 3. Clear SQL Database Tables (Documents and Feedback)
+    print("Clearing SQL database tables...")
+    from app.database import engine
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            # Delete from internal tables (portable across SQLite and Postgres)
+            conn.execute(text("DELETE FROM feedback"))
+            conn.execute(text("DELETE FROM documents"))
+            conn.commit()
+            print("Successfully cleared Feedback and Documents tables.")
+    except Exception as e:
+        print(f"Error clearing SQL tables: {e}")
+
 if __name__ == "__main__":
-    confirm = input("Are you sure you want to delete all embeddings and uploaded files? (y/n): ")
+    confirm = input("Are you sure you want to delete all embeddings, uploaded files, and SQL database records? (y/n): ")
     if confirm.lower() == 'y':
         clear_data()
     else:

@@ -7,6 +7,8 @@ export default function Home() {
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<{ role: 'user' | 'ai'; content: string; sources?: any[] }[]>([]);
   const [loading, setLoading] = useState(false);
+  const [feedbackComment, setFeedbackComment] = useState('');
+  const [commentingIdx, setCommentingIdx] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState('');
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -43,6 +45,12 @@ export default function Home() {
       const res = await fetch('http://localhost:8000/documents?limit=6', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      if (res.status === 401) {
+        alert("Session timed out. Please login again.");
+        localStorage.removeItem('token');
+        router.push('/login');
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         setDocuments(data);
@@ -61,6 +69,13 @@ export default function Home() {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
+
+      if (res.status === 401) {
+        alert("Session timed out. Please login again.");
+        localStorage.removeItem('token');
+        router.push('/login');
+        return;
+      }
 
       if (res.ok) {
         alert("Document deleted successfully");
@@ -99,6 +114,12 @@ export default function Home() {
       });
 
       if (!res.ok) {
+        if (res.status === 401) {
+          alert("Session timed out. Please login again.");
+          localStorage.removeItem('token');
+          router.push('/login');
+          return;
+        }
         const data = await res.json();
         throw new Error(data.detail || 'Upload failed');
       }
@@ -138,6 +159,8 @@ export default function Home() {
 
       if (!res.ok) {
         if (res.status === 401) {
+          alert("Session timed out. Please login again.");
+          localStorage.removeItem('token');
           router.push('/login');
           return;
         }
@@ -174,12 +197,21 @@ export default function Home() {
           response: msg.content,
           rating: rating,
           categories: [],
-          comment: ''
+          comment: rating === 'thumbs_down' ? feedbackComment : ''
         }),
       });
 
+      if (res.status === 401) {
+        alert("Session timed out. Please login again.");
+        localStorage.removeItem('token');
+        router.push('/login');
+        return;
+      }
+
       if (res.ok) {
-        alert(rating === 'thumbs_up' ? 'Thanks for your feedback!' : 'Thanks! We\'ll work on improving.');
+        alert(rating === 'thumbs_up' ? 'Thanks for your feedback!' : 'Thanks! We\'ve recorded your feedback to improve.');
+        setCommentingIdx(null);
+        setFeedbackComment('');
       }
     } catch (error) {
       console.error('Failed to submit feedback:', error);
@@ -202,6 +234,44 @@ export default function Home() {
       alert('Link and response copied to clipboard!');
     } catch (error) {
       console.error('Failed to share:', error);
+    }
+  };
+
+  const handleViewDocument = async (filename: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        alert("Please login to view documents.");
+        router.push('/login');
+        return;
+      }
+
+      const res = await fetch(`http://localhost:8000/view-document/${encodeURIComponent(filename)}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (res.status === 401) {
+        alert("Session timed out. Please login again.");
+        localStorage.removeItem('token');
+        router.push('/login');
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error('Failed to load document');
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+
+      // Cleanup the URL after some time
+      setTimeout(() => window.URL.revokeObjectURL(url), 10000);
+    } catch (error) {
+      console.error('Error viewing document:', error);
+      alert('Failed to open document preview.');
     }
   };
 
@@ -310,6 +380,7 @@ export default function Home() {
           <h2 className="text-xl font-semibold mb-4 text-gray-700">1. Upload Documents</h2>
           <input
             type="file"
+            accept=".pdf,.txt,.docx,.doc,.png,.jpg,.jpeg"
             onChange={handleUpload}
             className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
           />
@@ -362,8 +433,17 @@ export default function Home() {
                     <p className="font-semibold">Sources:</p>
                     {msg.sources.map((src: any, i: number) => (
                       <div key={i} className="mt-1">
-                        <span className="font-medium">{src.file}</span> (Page {src.page})
-                        {src.text && <div className="mt-1 p-1 bg-gray-200 rounded italic truncate">{src.text}</div>}
+                        <button
+                          onClick={() => handleViewDocument(src.file)}
+                          className="font-medium text-indigo-600 hover:underline text-left"
+                        >
+                          {src.file}
+                        </button> {src.page && <span className="text-gray-500">(Page {src.page})</span>}
+                        {src.text && (
+                          <div className="mt-1 p-2 bg-gray-50 border-l-2 border-indigo-200 rounded text-gray-700 text-[10px] leading-relaxed italic">
+                            {src.text}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -379,7 +459,7 @@ export default function Home() {
                       👍 Helpful
                     </button>
                     <button
-                      onClick={() => handleFeedback(idx, 'thumbs_down')}
+                      onClick={() => setCommentingIdx(idx === commentingIdx ? null : idx)}
                       className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
                       title="Not Helpful"
                     >
@@ -406,6 +486,32 @@ export default function Home() {
                     >
                       🔊 Read Aloud
                     </button>
+
+                    {/* Long Response Nudge */}
+                    {msg.content.length > 500 && (
+                      <p className="w-full text-[10px] text-gray-500 italic mt-1">
+                        Was this citation accurate? Your feedback helps me learn.
+                      </p>
+                    )}
+
+                    {/* Comment Box for Thumbs Down */}
+                    {commentingIdx === idx && (
+                      <div className="w-full mt-2 animate-in fade-in slide-in-from-top-1">
+                        <textarea
+                          placeholder="What was wrong? (e.g., wrong section, missed clause...)"
+                          value={feedbackComment}
+                          onChange={(e) => setFeedbackComment(e.target.value)}
+                          className="w-full p-2 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500"
+                          rows={2}
+                        />
+                        <button
+                          onClick={() => handleFeedback(idx, 'thumbs_down')}
+                          className="mt-1 px-4 py-1.5 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 transition-colors"
+                        >
+                          Submit Feedback
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
